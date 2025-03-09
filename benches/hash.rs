@@ -1,9 +1,9 @@
-use camphash::hash256;
+use camphash::hash;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 
 //----
 
-fn hash256_throughput(c: &mut Criterion) {
+fn hash_throughput(c: &mut Criterion) {
     let benches = [
         ("10b_message", 10),     // 10-byte input.
         ("100b_message", 100),   // 100-byte input.
@@ -13,7 +13,7 @@ fn hash256_throughput(c: &mut Criterion) {
         ("1mb_message", 1000000), // 1-megabyte input.
     ];
 
-    let mut group = c.benchmark_group("hash256");
+    let mut group = c.benchmark_group("hash");
 
     for (name, data_size) in benches.iter() {
         let data: Vec<u8> = b"abcdefghijklmnopqrstuvwxyz"
@@ -26,7 +26,7 @@ fn hash256_throughput(c: &mut Criterion) {
 
         group.bench_function(*name, |bench| {
             bench.iter(|| {
-                let _ = hash256(&data);
+                let _ = hash(&data);
             })
         });
     }
@@ -34,5 +34,5 @@ fn hash256_throughput(c: &mut Criterion) {
 
 //----
 
-criterion_group!(benches, hash256_throughput);
+criterion_group!(benches, hash_throughput);
 criterion_main!(benches);

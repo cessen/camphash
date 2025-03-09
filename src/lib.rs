@@ -48,7 +48,7 @@ const SEEDS: [__m128i; 9] = {
 };
 
 #[inline(never)]
-pub fn hash256(data: &[u8]) -> [u8; 16] {
+pub fn hash(data: &[u8]) -> [u8; 16] {
     unsafe {
         let mut state: [__m128i; 9] = SEEDS;
 
