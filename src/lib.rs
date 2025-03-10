@@ -3,9 +3,11 @@ use core::arch::x86_64::{
 };
 use core::mem::transmute;
 
+const LANES: usize = 8;
+
 // Seed values for each corresponding lane.
-const SEEDS: [__m128i; 9] = {
-    let seed_bytes: [[u8; 16]; 9] = [
+const SEEDS: [__m128i; LANES] = {
+    let seed_bytes: [[u8; 16]; LANES] = [
         [
             0x6a, 0xb0, 0xe3, 0x06, 0xe1, 0xfc, 0xa4, 0xfc, 0xe3, 0xac, 0x62, 0xc1, 0x22, 0xa4,
             0xdf, 0x5a,
@@ -38,10 +40,6 @@ const SEEDS: [__m128i; 9] = {
             0x0d, 0x1f, 0x4a, 0xe3, 0x7e, 0x24, 0x9c, 0xf0, 0x48, 0x47, 0xc9, 0x3a, 0xba, 0x09,
             0x09, 0x27,
         ],
-        [
-            0x76, 0xf1, 0xd3, 0x3a, 0xce, 0xb4, 0x95, 0xf9, 0x53, 0xd0, 0xad, 0x63, 0xed, 0x2f,
-            0x9c, 0xe0,
-        ],
     ];
 
     unsafe { transmute(seed_bytes) }
@@ -50,24 +48,15 @@ const SEEDS: [__m128i; 9] = {
 #[inline(never)]
 pub fn hash(data: &[u8]) -> [u8; 16] {
     unsafe {
-        let mut state: [__m128i; 9] = SEEDS;
+        let mut state: [__m128i; LANES] = SEEDS;
 
         // Process message data.
-        let data_tail = process_data_bulk_144(&mut state, data);
-        let data_tail = process_data_bulk_48(&mut state, data_tail);
+        let data_tail = process_data_bulk(&mut state, data);
         process_data_tail(&mut state, data_tail);
 
         // Xor all the lanes together.
-        {
-            state[0] = _mm_xor_si128(state[0], state[4]);
-            state[1] = _mm_xor_si128(state[1], state[5]);
-            state[2] = _mm_xor_si128(state[2], state[6]);
-            state[3] = _mm_xor_si128(state[3], state[7]);
-
-            state[0] = _mm_xor_si128(state[0], state[2]);
-            state[1] = _mm_xor_si128(state[1], state[3]);
-
-            state[0] = _mm_xor_si128(state[0], state[8]);
+        for i in 1..LANES {
+            state[0] = _mm_xor_si128(state[0], state[i]);
         }
 
         // Incorporate the message length.
@@ -86,180 +75,57 @@ pub fn hash(data: &[u8]) -> [u8; 16] {
     }
 }
 
-/// Does the main bulk processing of data that is at least 144 bytes large,
-/// using nine AES lanes.
+/// Does the main bulk processing of data that is at least `(16 * LANES)` bytes
+/// large, using nine AES lanes.
 ///
 /// This is the main workhorse function, responsible for bulk throughput with
 /// large input data.
-#[inline(always)]
-unsafe fn process_data_bulk_144<'a>(state: &mut [__m128i; 9], data: &'a [u8]) -> &'a [u8] {
+#[inline(never)]
+unsafe fn process_data_bulk<'a>(state: &mut [__m128i; LANES], data: &'a [u8]) -> &'a [u8] {
+    let block_size = 16 * LANES;
+
     // If there's too little data to process, so just bail early.
-    if data.len() < 144 {
+    if data.len() < block_size {
         return data;
     }
 
     let mut data = data;
 
     // Xor initial data.
-    {
-        let data_ptr_0: *const __m128i = transmute(data.as_ptr().offset(0));
-        let data_ptr_1: *const __m128i = transmute(data.as_ptr().offset(16));
-        let data_ptr_2: *const __m128i = transmute(data.as_ptr().offset(32));
-        let data_ptr_3: *const __m128i = transmute(data.as_ptr().offset(48));
-        let data_ptr_4: *const __m128i = transmute(data.as_ptr().offset(64));
-        let data_ptr_5: *const __m128i = transmute(data.as_ptr().offset(80));
-        let data_ptr_6: *const __m128i = transmute(data.as_ptr().offset(96));
-        let data_ptr_7: *const __m128i = transmute(data.as_ptr().offset(112));
-        let data_ptr_8: *const __m128i = transmute(data.as_ptr().offset(128));
-        data = &data[144..];
-
-        state[0] = _mm_xor_si128(state[0], _mm_loadu_si128(data_ptr_0));
-        state[1] = _mm_xor_si128(state[1], _mm_loadu_si128(data_ptr_1));
-        state[2] = _mm_xor_si128(state[2], _mm_loadu_si128(data_ptr_2));
-        state[3] = _mm_xor_si128(state[3], _mm_loadu_si128(data_ptr_3));
-        state[4] = _mm_xor_si128(state[4], _mm_loadu_si128(data_ptr_4));
-        state[5] = _mm_xor_si128(state[5], _mm_loadu_si128(data_ptr_5));
-        state[6] = _mm_xor_si128(state[6], _mm_loadu_si128(data_ptr_6));
-        state[7] = _mm_xor_si128(state[7], _mm_loadu_si128(data_ptr_7));
-        state[8] = _mm_xor_si128(state[8], _mm_loadu_si128(data_ptr_8));
+    for i in 0..LANES {
+        let data_ptr: *const __m128i = transmute(data.as_ptr());
+        state[i] = _mm_xor_si128(state[i], _mm_loadu_si128(data_ptr));
+        data = &data[16..];
     }
 
-    while data.len() >= 144 {
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-        state[3] = _mm_aesenc_si128(state[3], SEEDS[3]);
-        state[4] = _mm_aesenc_si128(state[4], SEEDS[4]);
-        state[5] = _mm_aesenc_si128(state[5], SEEDS[5]);
-        state[6] = _mm_aesenc_si128(state[6], SEEDS[6]);
-        state[7] = _mm_aesenc_si128(state[7], SEEDS[7]);
-        state[8] = _mm_aesenc_si128(state[8], SEEDS[8]);
+    // Mix state and xor subsequent data.
+    while data.len() >= block_size {
+        for i in 0..LANES {
+            state[i] = _mm_aesenc_si128(state[i], SEEDS[i]);
+        }
 
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-        state[3] = _mm_aesenc_si128(state[3], SEEDS[3]);
-        state[4] = _mm_aesenc_si128(state[4], SEEDS[4]);
-        state[5] = _mm_aesenc_si128(state[5], SEEDS[5]);
-        state[6] = _mm_aesenc_si128(state[6], SEEDS[6]);
-        state[7] = _mm_aesenc_si128(state[7], SEEDS[7]);
-        state[8] = _mm_aesenc_si128(state[8], SEEDS[8]);
+        for i in 0..LANES {
+            state[i] = _mm_aesenc_si128(state[i], SEEDS[i]);
+        }
 
-        // We use the built-in xor at the end of the third AES round to xor in
-        // the next data chunks.
-        let data_ptr_0: *const __m128i = transmute(data.as_ptr().offset(0));
-        let data_ptr_1: *const __m128i = transmute(data.as_ptr().offset(16));
-        let data_ptr_2: *const __m128i = transmute(data.as_ptr().offset(32));
-        let data_ptr_3: *const __m128i = transmute(data.as_ptr().offset(48));
-        let data_ptr_4: *const __m128i = transmute(data.as_ptr().offset(64));
-        let data_ptr_5: *const __m128i = transmute(data.as_ptr().offset(80));
-        let data_ptr_6: *const __m128i = transmute(data.as_ptr().offset(96));
-        let data_ptr_7: *const __m128i = transmute(data.as_ptr().offset(112));
-        let data_ptr_8: *const __m128i = transmute(data.as_ptr().offset(128));
-        data = &data[144..];
-
-        state[0] = _mm_aesenc_si128(state[0], _mm_loadu_si128(data_ptr_0));
-        state[1] = _mm_aesenc_si128(state[1], _mm_loadu_si128(data_ptr_1));
-        state[2] = _mm_aesenc_si128(state[2], _mm_loadu_si128(data_ptr_2));
-        state[3] = _mm_aesenc_si128(state[3], _mm_loadu_si128(data_ptr_3));
-        state[4] = _mm_aesenc_si128(state[4], _mm_loadu_si128(data_ptr_4));
-        state[5] = _mm_aesenc_si128(state[5], _mm_loadu_si128(data_ptr_5));
-        state[6] = _mm_aesenc_si128(state[6], _mm_loadu_si128(data_ptr_6));
-        state[7] = _mm_aesenc_si128(state[7], _mm_loadu_si128(data_ptr_7));
-        state[8] = _mm_aesenc_si128(state[8], _mm_loadu_si128(data_ptr_8));
+        for i in 0..LANES {
+            // We use the built-in xor at the end of the third AES round to xor in
+            // the next data chunks.
+            let data_ptr: *const __m128i = transmute(data.as_ptr());
+            state[i] = _mm_aesenc_si128(state[i], _mm_loadu_si128(data_ptr));
+            data = &data[16..];
+        }
     }
 
-    // Mix last data.
-    {
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-        state[3] = _mm_aesenc_si128(state[3], SEEDS[3]);
-        state[4] = _mm_aesenc_si128(state[4], SEEDS[4]);
-        state[5] = _mm_aesenc_si128(state[5], SEEDS[5]);
-        state[6] = _mm_aesenc_si128(state[6], SEEDS[6]);
-        state[7] = _mm_aesenc_si128(state[7], SEEDS[7]);
-        state[8] = _mm_aesenc_si128(state[8], SEEDS[8]);
-
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-        state[3] = _mm_aesenc_si128(state[3], SEEDS[3]);
-        state[4] = _mm_aesenc_si128(state[4], SEEDS[4]);
-        state[5] = _mm_aesenc_si128(state[5], SEEDS[5]);
-        state[6] = _mm_aesenc_si128(state[6], SEEDS[6]);
-        state[7] = _mm_aesenc_si128(state[7], SEEDS[7]);
-        state[8] = _mm_aesenc_si128(state[8], SEEDS[8]);
-
-        state[0] = _mm_aesenc_si128(state[0], _mm_setzero_si128());
-        state[1] = _mm_aesenc_si128(state[1], _mm_setzero_si128());
-        state[2] = _mm_aesenc_si128(state[2], _mm_setzero_si128());
-        state[3] = _mm_aesenc_si128(state[3], _mm_setzero_si128());
-        state[4] = _mm_aesenc_si128(state[4], _mm_setzero_si128());
-        state[5] = _mm_aesenc_si128(state[5], _mm_setzero_si128());
-        state[6] = _mm_aesenc_si128(state[6], _mm_setzero_si128());
-        state[7] = _mm_aesenc_si128(state[7], _mm_setzero_si128());
-        state[8] = _mm_aesenc_si128(state[8], _mm_setzero_si128());
+    // Mix state for last data.
+    for i in 0..LANES {
+        state[i] = _mm_aesenc_si128(state[i], SEEDS[i]);
     }
-
-    data
-}
-
-#[inline(always)]
-unsafe fn process_data_bulk_48<'a>(state: &mut [__m128i; 9], data: &'a [u8]) -> &'a [u8] {
-    // If there's too little data to process, so just bail early.
-    if data.len() < 48 {
-        return data;
+    for i in 0..LANES {
+        state[i] = _mm_aesenc_si128(state[i], SEEDS[i]);
     }
-
-    let mut data = data;
-
-    // Xor initial data.
-    {
-        let data_ptr_0: *const __m128i = transmute(data.as_ptr().offset(0));
-        let data_ptr_1: *const __m128i = transmute(data.as_ptr().offset(16));
-        let data_ptr_2: *const __m128i = transmute(data.as_ptr().offset(32));
-        data = &data[48..];
-
-        state[0] = _mm_xor_si128(state[0], _mm_loadu_si128(data_ptr_0));
-        state[1] = _mm_xor_si128(state[1], _mm_loadu_si128(data_ptr_1));
-        state[2] = _mm_xor_si128(state[2], _mm_loadu_si128(data_ptr_2));
-    }
-
-    while data.len() >= 48 {
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-
-        // We use the xor at the end of the third AES round to xor in the next
-        // data chunk.
-        let data_ptr_0: *const __m128i = transmute(data.as_ptr().offset(0));
-        let data_ptr_1: *const __m128i = transmute(data.as_ptr().offset(16));
-        let data_ptr_2: *const __m128i = transmute(data.as_ptr().offset(32));
-        data = &data[48..];
-
-        state[0] = _mm_aesenc_si128(state[0], _mm_loadu_si128(data_ptr_0));
-        state[1] = _mm_aesenc_si128(state[1], _mm_loadu_si128(data_ptr_1));
-        state[2] = _mm_aesenc_si128(state[2], _mm_loadu_si128(data_ptr_2));
-    }
-
-    // Mix last data.
-    {
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-
-        state[0] = _mm_aesenc_si128(state[0], SEEDS[0]);
-        state[1] = _mm_aesenc_si128(state[1], SEEDS[1]);
-        state[2] = _mm_aesenc_si128(state[2], SEEDS[2]);
-
-        state[0] = _mm_aesenc_si128(state[0], _mm_setzero_si128());
-        state[1] = _mm_aesenc_si128(state[1], _mm_setzero_si128());
-        state[2] = _mm_aesenc_si128(state[2], _mm_setzero_si128());
+    for i in 0..LANES {
+        state[i] = _mm_aesenc_si128(state[i], _mm_setzero_si128());
     }
 
     data
@@ -267,8 +133,8 @@ unsafe fn process_data_bulk_48<'a>(state: &mut [__m128i; 9], data: &'a [u8]) -> 
 
 /// Processes the remaining data after large-chunk processing has already taken
 /// care of what they can.
-#[inline(always)]
-unsafe fn process_data_tail(state: &mut [__m128i; 9], data: &[u8]) {
+#[inline(never)]
+unsafe fn process_data_tail(state: &mut [__m128i; LANES], data: &[u8]) {
     let mut data = data;
 
     // Handle full 16-byte chunks.
