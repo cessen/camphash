@@ -1,14 +1,14 @@
 const TEST_VECTORS: &[(&[u8], &str)] = &[
-    (&[], "ff93753796465584e24962026ff5db9c"),
-    (&[0], "c324614fc09cc5913bbb87d8eb9cb778"),
-    (b"0123456789", "8726f89a886a719431b5a5163a3afa8c"),
-    (b"abcdefghijklmnopqrstuvwxyz", "2994002e16ebc402c76768419b458824"),
-    (b"this is 16 bytes", "853b156237d0ddc94be88a13bb645c67"),
-    (b"This string is exactly 32 bytes.", "3b65682040574ae7af2da973bba06dee"),
-    (b"The quick brown fox jumps over the lazy dog.", "6924f291abdd13c4ad3a6226ed64f787"),
+    (&[], "e9b81ae936aa1c0b41dd1d5e9ef113b0"),
+    (&[0], "ab58c150434c100754a4abba17ca712e"),
+    (b"0123456789", "c766242a05087d6985174cbb95b81ebd"),
+    (b"abcdefghijklmnopqrstuvwxyz", "5cf5a9690009b3ecfcc446c428ea2104"),
+    (b"this is 16 bytes", "7c9d132f3348860872cbd651ab0f9db7"),
+    (b"This string is exactly 32 bytes.", "dd4f5e8181af0326ced21d1a29562bd8"),
+    (b"The quick brown fox jumps over the lazy dog.", "2825a3a32e58f531bb1e90c8f54a6efa"),
     (
         b"Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-        "cc8221211e4966b74bf054903f2e12c7",
+        "7b24c01f19878070cbedbcc1a2de0e6b",
     ),
 ];
 
