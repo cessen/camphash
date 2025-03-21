@@ -7,8 +7,8 @@ const TEST_VECTORS: &[(&[u8], &str)] = &[
     (b"This string is exactly 32 bytes.", "c5aa5c4e0556ee6e09bc975be6f0d894"),
     (b"The quick brown fox jumps over the lazy dog.", "2deb358867cbb26fe76cf3f704f17264"),
     (
-        b"Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-        "7c667133431511f367611a53e6e5b8bd",
+        b"You don't know about me without you have read a book by the name of The Adventures of Tom Sawyer; but that ain't no matter. That book was made by Mr. Mark Twain, and he told the truth, mainly. There was things which he stretched, but mainly he told the truth. That is nothing. I never seen anybody but lied one time or another, without it was Aunt Polly, or the widow, or maybe Mary. Aunt Polly--Tom's Aunt Polly, she is--and Mary, and the Widow Douglas is all told about in that book, which is mostly a true book, with some stretchers, as I said before.",
+        "6c04f4f95f8c29728814bf569361ea6b",
     ),
 ];
 
