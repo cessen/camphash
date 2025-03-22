@@ -4,7 +4,7 @@ use core::arch::x86_64::{
 use core::mem::transmute;
 
 const LANES: usize = 24;
-const LANES_PER_SET: usize = 3;
+const LANES_PER_SET: usize = 6;
 
 // Initial values for each corresponding lane.
 const INITIAL_STATE: [__m128i; LANES] = {
@@ -165,10 +165,10 @@ unsafe fn process_data_tail(state: &mut [__m128i; LANES], data: &[u8]) {
     let mut lane = 0;
     while data.len() >= 16 {
         let data_ptr: *const __m128i = transmute(data.as_ptr());
-        state[lane] = _mm_xor_si128(state[0], _mm_loadu_si128(data_ptr));
-        state[lane] = _mm_aesenc_si128(state[0], XOR_VALUE);
-        state[lane] = _mm_aesenc_si128(state[0], XOR_VALUE);
-        state[lane] = _mm_aesenc_si128(state[0], _mm_setzero_si128());
+        state[lane] = _mm_xor_si128(state[lane], _mm_loadu_si128(data_ptr));
+        state[lane] = _mm_aesenc_si128(state[lane], XOR_VALUE);
+        state[lane] = _mm_aesenc_si128(state[lane], XOR_VALUE);
+        state[lane] = _mm_aesenc_si128(state[lane], _mm_setzero_si128());
         data = &data[16..];
 
         lane += 1;
@@ -180,9 +180,65 @@ unsafe fn process_data_tail(state: &mut [__m128i; LANES], data: &[u8]) {
         (&mut buffer[..data.len()]).copy_from_slice(data);
 
         let data_ptr: *const __m128i = transmute(buffer.as_ptr());
-        state[lane] = _mm_xor_si128(state[0], _mm_loadu_si128(data_ptr));
-        state[lane] = _mm_aesenc_si128(state[0], XOR_VALUE);
-        state[lane] = _mm_aesenc_si128(state[0], XOR_VALUE);
-        state[lane] = _mm_aesenc_si128(state[0], _mm_setzero_si128());
+        state[lane] = _mm_xor_si128(state[lane], _mm_loadu_si128(data_ptr));
+        state[lane] = _mm_aesenc_si128(state[lane], XOR_VALUE);
+        state[lane] = _mm_aesenc_si128(state[lane], XOR_VALUE);
+        state[lane] = _mm_aesenc_si128(state[lane], _mm_setzero_si128());
     }
+}
+
+//-------------------------------------------------------------
+// Simpler reference implementation.  Slower.
+
+#[inline(never)]
+pub fn hash_ref(data: &[u8]) -> [u8; 16] {
+    let data_len = data.len();
+
+    let mut data = data;
+    let mut state: [__m128i; LANES] = INITIAL_STATE;
+
+    unsafe {
+        // Process message data.
+        {
+            let mut lane_i = 0;
+            while !data.is_empty() {
+                absorb_ref(&mut state[lane_i], data);
+
+                data = &data[16_usize.min(data.len())..];
+                lane_i = (lane_i + 1) % state.len();
+            }
+        }
+
+        // Xor all the lanes together.
+        for i in 1..LANES {
+            state[0] = _mm_xor_si128(state[0], state[i]);
+        }
+
+        // Incorporate the message length.
+        absorb_ref(&mut state[0], &(data_len as u64).to_le_bytes());
+
+        transmute::<_, [u8; 16]>(state[0])
+    }
+}
+
+fn absorb_ref(lane: &mut __m128i, data: &[u8]) {
+    let mut buffer = [0u8; 16];
+    let copy_len = data.len().min(16);
+    buffer[..copy_len].copy_from_slice(&data[..copy_len]);
+    let data_ptr: *const __m128i = unsafe { transmute(buffer.as_ptr()) };
+
+    *lane = aes(*lane, unsafe { _mm_loadu_si128(data_ptr) });
+    *lane = aes(*lane, XOR_VALUE);
+    *lane = aes(*lane, XOR_VALUE);
+}
+
+fn aes(state: __m128i, key: __m128i) -> __m128i {
+    let mut state = state;
+
+    unsafe {
+        state = _mm_xor_si128(state, key);
+        state = _mm_aesenc_si128(state, _mm_setzero_si128());
+    }
+
+    state
 }
