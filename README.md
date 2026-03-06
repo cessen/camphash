@@ -2,6 +2,8 @@
 
 A proof-of-concept non-cryprographic hash function utilizing AES hardware instructions.
 
+**Note:** this is an exploratory/experimental project, and the hash has not been vetted.  Do not use this for anything real.
+
 Goals:
 
 - 128-bit output.
